@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Financial Data Hierarchical Viewer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .tree-item {
+      transition: all 0.2s ease;
+    }
+    .tree-toggle {
+      cursor: pointer;
+      user-select: none;
+    }
+    .tree-toggle:hover {
+      background-color: rgba(59, 130, 246, 0.1);
+    }
+    .tree-icon {
+      transition: transform 0.2s ease;
+      display: inline-block;
+      width: 1em;
+      text-align: center;
+    }
+    .tab-button {
+      transition: all 0.2s ease;
+    }
+    .tab-button.active {
+      background-color: #3b82f6;
+      color: white;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    .financial-table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    .financial-table th,
+    .financial-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .financial-table th {
+      background-color: #2563eb;
+      color: white;
+      font-weight: 600;
+      text-align: center;
+    }
+    .financial-table th:first-child {
+      text-align: left;
+    }
+    .financial-table td {
+      text-align: center;
+    }
+    .financial-table td:first-child {
+      text-align: left;
+    }
+    .financial-table tbody tr:hover {
+      background-color: rgba(59, 130, 246, 0.05);
+    }
+    .tree-node-cell {
+      display: flex;
+      align-items: center;
+    }
+    .level-0 { padding-left: 0; }
+    .level-1 { padding-left: 24px; }
+    .level-2 { padding-left: 48px; }
+    .level-3 { padding-left: 72px; }
+    .level-4 { padding-left: 96px; }
+    .level-5 { padding-left: 120px; }
+
+    /* detail row styling */
+    .detail-row td {
+      background-color: #f9fafb;
+      padding: 0;
+      border: none;
+    }
+    .detail-row .financial-table {
+      margin: 0.5rem 0;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <div class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold text-gray-800 text-center mb-8">
+      Financial Data Hierarchical Viewer
+    </h1>
+
+    <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+      <!-- Tab Buttons -->
+      <div class="flex border-b">
+        <button
+          class="tab-button flex-1 px-6 py-4 text-lg font-semibold bg-blue-500 text-white active"
+          onclick="switchTab('revenue', event)"
+        >
+          Revenue
+        </button>
+        <button
+          class="tab-button flex-1 px-6 py-4 text-lg font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300"
+          onclick="switchTab('expenses', event)"
+        >
+          Expenses
+        </button>
+      </div>
+
+      <!-- Revenue Tab Content -->
+      <div id="revenue-tab" class="tab-content active p-6">
+        <table class="financial-table">
+          <thead>
+            <tr>
+              <th>Revenue</th>
+              <th>Current Budget</th>
+              <th>Actuals</th>
+            </tr>
+          </thead>
+          <tbody id="revenue-table-body"></tbody>
+        </table>
+      </div>
+
+      <!-- Expenses Tab Content -->
+      <div id="expenses-tab" class="tab-content p-6">
+        <table class="financial-table">
+          <thead>
+            <tr>
+              <th>Expenditure</th>
+              <th>Current Budget</th>
+              <th>Pre-Encumbrance</th>
+              <th>Encumbrance</th>
+              <th>Actuals</th>
+            </tr>
+          </thead>
+          <tbody id="expenses-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Data injected by Flask
+    const revenueData = {{ revenue_data | tojson | safe }};
+    const expensesData = {{ expenses_data | tojson | safe }};
+
+    // Switch between tabs
+    function switchTab(tabName, evt) {
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      document.querySelectorAll('.tab-button').forEach(b => {
+        b.classList.remove('active', 'bg-blue-500', 'text-white');
+        b.classList.add('bg-gray-200', 'text-gray-700');
+      });
+      document.getElementById(tabName + '-tab').classList.add('active');
+      evt.currentTarget.classList.add('active', 'bg-blue-500', 'text-white');
+      evt.currentTarget.classList.remove('bg-gray-200', 'text-gray-700');
+    }
+
+    // Format numbers as currency
+    function formatCurrency(amount) {
+      if (!amount) return '$0.00';
+      const n = parseFloat(amount.toString().replace(/[$,]/g, ''));
+      return isNaN(n)
+        ? '$0.00'
+        : '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // Icons
+    function getTreeIcon(item, expanded = true) {
+      if (!item.has_children) return '<span class="tree-icon"></span>';
+      return `<span class="tree-icon" style="transform: rotate(${expanded ? 0 : -90}deg)">▼</span>`;
+    }
+    function getFolderIcon(level, hasChildren) {
+      return level === 0 ? '📁' : hasChildren ? '📂' : '📄';
+    }
+
+    // Render revenue rows (flat table)
+    function renderRevenueTable(items, container) {
+      items.forEach(item => {
+        const row = document.createElement('tr');
+        row.className = 'tree-item';
+        row.dataset.level = item.level;
+        const jsonStr = JSON.stringify(item).replace(/"/g, '&quot;');
+        row.innerHTML = `
+          <td class="tree-toggle" data-item="${jsonStr}" onclick="handleNodeClick(this)">
+            <div class="tree-node-cell level-${Math.min(item.level,5)}">
+              ${getTreeIcon(item,true)}
+              <span class="ml-2">${getFolderIcon(item.level,item.has_children)}</span>
+              <span class="ml-2 font-medium">${item.tree_node_desc}</span>
+            </div>
+          </td>
+          <td>${formatCurrency(item.total_budget_amt)}</td>
+          <td>${formatCurrency(item.total_rev_amt)}</td>
+        `;
+        container.appendChild(row);
+        if (item.children) {
+          renderRevenueTable(item.children, container);
+        }
+      });
+    }
+
+    // Render expenses rows (flat table)
+    function renderExpensesTable(items, container) {
+      items.forEach(item => {
+        const row = document.createElement('tr');
+        row.className = 'tree-item';
+        row.dataset.level = item.level;
+        const jsonStr = JSON.stringify(item).replace(/"/g, '&quot;');
+        row.innerHTML = `
+          <td class="tree-toggle" data-item="${jsonStr}" onclick="handleNodeClick(this)">
+            <div class="tree-node-cell level-${Math.min(item.level,5)}">
+              ${getTreeIcon(item,true)}
+              <span class="ml-2">${getFolderIcon(item.level,item.has_children)}</span>
+              <span class="ml-2 font-medium">${item.tree_node_desc}</span>
+            </div>
+          </td>
+          <td>${formatCurrency(item.total_budget_amt)}</td>
+          <td>${formatCurrency(item.total_pre_encumbered_amt)}</td>
+          <td>${formatCurrency(item.total_encumbered_amt)}</td>
+          <td>${formatCurrency(item.total_expenses)}</td>
+        `;
+        container.appendChild(row);
+        if (item.children) {
+          renderExpensesTable(item.children, container);
+        }
+      });
+    }
+
+    // Handle click on a node
+    function handleNodeClick(cell) {
+      const item = JSON.parse(cell.getAttribute('data-item'));
+      if (item.has_children) {
+        toggleNode(cell);
+      } else if (item.fund_code) {
+        fetch(`/api/getdata?fund_code=${encodeURIComponent(item.fund_code)}`)
+          .then(r => r.json())
+          .then(data => showDetails(cell.closest('tr'), data))
+          .catch(console.error);
+      }
+    }
+
+    // Collapse/expand functionality
+    function toggleNode(cell) {
+      const row = cell.closest('tr');
+      const lvl = +row.dataset.level;
+      const icon = cell.querySelector('.tree-icon');
+      const collapsed = icon.style.transform === 'rotate(-90deg)';
+      icon.style.transform = collapsed ? 'rotate(0deg)' : 'rotate(-90deg)';
+      let next = row.nextElementSibling;
+      while (next && +next.dataset.level > lvl) {
+        next.style.display = collapsed ? '' : 'none';
+        next = next.nextElementSibling;
+      }
+    }
+
+    // Show detail row under a leaf node
+   function showDetails(row, detailData) {
+  // remove old detail-row if present
+  if (row.nextElementSibling?.classList.contains('detail-row')) {
+    row.nextElementSibling.remove();
+  }
+
+  // build a single <tr> with one <td> per key
+  const cols = Object.keys(detailData);
+  const detailRow = document.createElement('tr');
+  detailRow.className = 'detail-row';
+
+  cols.forEach((colName, idx) => {
+    const td = document.createElement('td');
+    // first column is a text label, others are amounts
+    if (idx === 0) {
+      td.textContent = detailData[colName];
+    } else {
+      td.textContent = formatCurrency(detailData[colName]);
+    }
+    detailRow.appendChild(td);
+  });
+
+  // insert right below the clicked row
+  row.parentNode.insertBefore(detailRow, row.nextSibling);
+}
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      const revBody = document.getElementById('revenue-table-body');
+      const expBody = document.getElementById('expenses-table-body');
+
+      if (revenueData.length) renderRevenueTable(revenueData, revBody);
+      else revBody.innerHTML = '<tr><td colspan="3" class="text-center py-4">No revenue data</td></tr>';
+
+      if (expensesData.length) renderExpensesTable(expensesData, expBody);
+      else expBody.innerHTML = '<tr><td colspan="5" class="text-center py-4">No expenses data</td></tr>';
+    });
+  </script>
+</body>
+</html>

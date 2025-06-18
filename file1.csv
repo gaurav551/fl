@@ -1,0 +1,24 @@
+Revenue:,,,,,,,,,,
+tree_node_desc,parent_deptid,deptid,fund_code,account,total_budget_amt,total_rev_amt,,,,
+Total Revenue,,1000,100,4000001,750 000,780 000,,,,
+Operating Revenue,1000,1100,100,4000101,700 000,730 000,,,,
+ Product Sales,1100,1110,100,4000111,400 000,420 000,,,,
+Product A,1110,1111,100,4000112,200 000,210 000,,,,
+ Product B,1110,1112,100,4000113,200 000,210 000,,,,
+Service Revenue,1100,1120,100,4000121,300 000,310 000,,,,
+Non-Operating Revenue,1000,1200,100,4000201,50 000,50 000,,,,
+Interest Income,1200,1210,100,4000211,30 000,30 000,,,,
+Miscellaneous Income,1200,1220,100,4000221,20 000,20 000,,,,
+,,,,,,,,,,
+Expenses:,,,,,,,,,,
+tree_node_desc,parent_deptid,deptid,fund_code,account,total_budget_amt,total_pre_encumbered_amt,total_encumbered_amt,total_expenses,total_exp_variance,pct_budget_spent
+Total Expenses,,2000,100,5000001,500 000,50 000,110 000,330 000,170 000,66.00%
+Operating Expenses,2000,2100,100,5000101,450 000,45 000,100 000,300 000,150 000,66.67%
+SalariesEE,2100,2110,100,5000111,200 000,20 000,50 000,130 000,70 000,65.00%
+ Staff Salaries,2110,2111,100,5000112,150 000,15 000,40 000,100 000,50 000,66.67%
+Contractor Fees,2110,2112,100,5000113,50 000,5 000,10 000,30 000,20 000,60.00%
+ Rent,2100,2120,100,5000121,100 000,10 000,20 000,70 000,30 000,70.00%
+Utilities,2100,2130,100,5000131,150 000,15 000,30 000,100 000,50 000,66.67%
+Non-Operating Expenses,2000,2200,100,5000201,50 000,5 000,10 000,30 000,20 000,60.00%
+Interest Expense,2200,2210,100,5000211,30 000,3 000,6 000,18 000,12 000,60.00%
+Miscellaneous Expenses,2200,2220,100,5000221,20 000,2 000,4 000,12 000,8 000,60.00%
