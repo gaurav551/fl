@@ -186,7 +186,7 @@
             <div class="tree-node-cell level-${Math.min(item.level,5)}">
               ${getTreeIcon(item,true)}
               <span class="ml-2">${getFolderIcon(item.level,item.has_children)}</span>
-              <span class="ml-2 font-medium">${item.tree_node_desc}</span>
+              <span class="ml-2 font-medium">${item.tree_node_desc} - ${item.account}</span>
             </div>
           </td>
           <td>${formatCurrency(item.total_budget_amt)}</td>
@@ -211,7 +211,7 @@
             <div class="tree-node-cell level-${Math.min(item.level,5)}">
               ${getTreeIcon(item,true)}
               <span class="ml-2">${getFolderIcon(item.level,item.has_children)}</span>
-              <span class="ml-2 font-medium">${item.tree_node_desc}</span>
+              <span class="ml-2 font-medium">${item.tree_node_desc} - ${item.account}</span>
             </div>
           </td>
           <td>${formatCurrency(item.total_budget_amt)}</td>

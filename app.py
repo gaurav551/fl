@@ -1,134 +1,177 @@
 from flask import Flask, render_template, jsonify, request
 import pandas as pd
-import json
 from collections import defaultdict
+from sqlalchemy import create_engine, text
+
+# ── PostgreSQL connection ──────────────────────────────────────────────────────
+DATABASE_CONFIG = {
+    "host":     "52.71.150.231",
+    "port":     5433,
+    "database": "postgres",
+    "user":     "n8n",
+    "password": "n8n"
+}
+
+engine = create_engine(
+    f"postgresql+psycopg2://{DATABASE_CONFIG['user']}:"
+    f"{DATABASE_CONFIG['password']}@{DATABASE_CONFIG['host']}:"
+    f"{DATABASE_CONFIG['port']}/{DATABASE_CONFIG['database']}"
+)
 
 app = Flask(__name__)
 
+# ── CSV parsing & hierarchy builder (unchanged) ────────────────────────────────
 def parse_csv_data():
-    """Parse the CSV file and organize data into hierarchical structure"""
+    """Parse file1.csv into two flat lists, then build hierarchies."""
     try:
-        # Read the CSV file with proper handling
-        with open('file1.csv', 'r', encoding='utf-8') as file:
-            lines = file.readlines()
-        
-        # Initialize data structures
-        revenue_data = []
-        expenses_data = []
-        current_section = None
-        
+        with open('file1.csv', 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+
+        revenue_rows, expense_rows = [], []
+        section = None
+
         for line in lines:
-            # Split by comma and clean up
-            parts = [part.strip() for part in line.split(',')]
-            
-            # Check if this is a section header
-            if len(parts) > 0 and 'Revenue:' in parts[0]:
-                current_section = 'revenue'
+            parts = [p.strip() for p in line.split(',')]
+            if parts and 'Revenue:' in parts[0]:
+                section = 'revenue'
                 continue
-            elif len(parts) > 0 and 'Expenses:' in parts[0]:
-                current_section = 'expenses'
+            if parts and 'Expenses:' in parts[0]:
+                section = 'expenses'
                 continue
-            
-            # Skip header rows
-            if len(parts) > 0 and 'tree_node_desc' in parts[0]:
+            if not parts or parts[0].startswith('tree_node_desc') or not parts[0]:
                 continue
-            
-            # Skip empty rows
-            if len(parts) == 0 or not parts[0] or parts[0] == '':
-                continue
-            
-            # Process data rows
-            if current_section == 'revenue' and len(parts) >= 7:
-                revenue_item = {
+
+            if section == 'revenue' and len(parts) >= 7:
+                revenue_rows.append({
                     'tree_node_desc': parts[0],
-                    'parent_deptid': parts[1] if parts[1] else '',
-                    'deptid': parts[2] if parts[2] else '',
-                    'fund_code': parts[3] if parts[3] else '',
-                    'account': parts[4] if parts[4] else '',
-                    'total_budget_amt': parts[5] if parts[5] else '',
-                    'total_rev_amt': parts[6] if parts[6] else ''
-                }
-                revenue_data.append(revenue_item)
-            
-            elif current_section == 'expenses' and len(parts) >= 11:
-                expenses_item = {
-                    'tree_node_desc': parts[0],
-                    'parent_deptid': parts[1] if parts[1] else '',
-                    'deptid': parts[2] if parts[2] else '',
-                    'fund_code': parts[3] if parts[3] else '',
-                    'account': parts[4] if parts[4] else '',
-                    'total_budget_amt': parts[5] if parts[5] else '',
-                    'total_pre_encumbered_amt': parts[6] if parts[6] else '',
-                    'total_encumbered_amt': parts[7] if parts[7] else '',
-                    'total_expenses': parts[8] if parts[8] else '',
-                    'total_exp_variance': parts[9] if parts[9] else '',
-                    'pct_budget_spent': parts[10] if parts[10] else ''
-                }
-                expenses_data.append(expenses_item)
-        
-        print(f"Revenue data parsed: {len(revenue_data)} items")
-        print(f"Expenses data parsed: {len(expenses_data)} items")
-        
-        return build_hierarchy(revenue_data), build_hierarchy(expenses_data)
-    
+                    'parent_deptid':  parts[1],
+                    'deptid':         parts[2],
+                    'fund_code':      parts[3],
+                    'account':        parts[4],
+                    'total_budget_amt': parts[5],
+                    'total_rev_amt':    parts[6],
+                })
+            elif section == 'expenses' and len(parts) >= 11:
+                expense_rows.append({
+                    'tree_node_desc':            parts[0],
+                    'parent_deptid':             parts[1],
+                    'deptid':                    parts[2],
+                    'fund_code':                 parts[3],
+                    'account':                   parts[4],
+                    'total_budget_amt':          parts[5],
+                    'total_pre_encumbered_amt':  parts[6],
+                    'total_encumbered_amt':      parts[7],
+                    'total_expenses':            parts[8],
+                    'total_exp_variance':        parts[9],
+                    'pct_budget_spent':          parts[10],
+                })
+
+        return build_hierarchy(revenue_rows), build_hierarchy(expense_rows)
+
     except Exception as e:
-        print(f"Error parsing CSV: {e}")
+        print("CSV parse error:", e)
         return [], []
 
 def build_hierarchy(data):
-    """Build hierarchical structure from flat data"""
-    # Create lookup dictionaries
-    items_by_id = {item['deptid']: item for item in data if item['deptid']}
-    children_by_parent = defaultdict(list)
-    
-    # Group children by parent
+    """Convert flat list (with parent_deptid pointers) into nested tree."""
+    items = {item['deptid']: item for item in data if item['deptid']}
+    children = defaultdict(list)
     for item in data:
-        parent_id = item['parent_deptid']
-        if parent_id:
-            children_by_parent[parent_id].append(item)
-    
-    # Add children to items and calculate levels
-    def add_children_and_level(item, level=0):
-        item['level'] = level
-        item['children'] = []
-        item['has_children'] = False
-        
-        if item['deptid'] in children_by_parent:
-            item['children'] = children_by_parent[item['deptid']]
-            item['has_children'] = True
-            for child in item['children']:
-                add_children_and_level(child, level + 1)
-    
-    # Find root items (items without parents or parents not in data)
-    root_items = []
+        if item['parent_deptid']:
+            children[item['parent_deptid']].append(item)
+    def recurse(item, lvl=0):
+        item['level'] = lvl
+        item['children'] = children.get(item['deptid'], [])
+        item['has_children'] = bool(item['children'])
+        for c in item['children']:
+            recurse(c, lvl+1)
+    roots = []
     for item in data:
-        if not item['parent_deptid'] or item['parent_deptid'] not in items_by_id:
-            add_children_and_level(item)
-            root_items.append(item)
-    
-    return root_items
+        if not item['parent_deptid'] or item['parent_deptid'] not in items:
+            recurse(item)
+            roots.append(item)
+    return roots
 
+# ── Routes ─────────────────────────────────────────────────────────────────────
 @app.route('/')
 def index():
     revenue_data, expenses_data = parse_csv_data()
-    return render_template('index.html', revenue_data=revenue_data, expenses_data=expenses_data)
+    return render_template('index.html',
+                           revenue_data=revenue_data,
+                           expenses_data=expenses_data)
 
 @app.route('/api/getdata')
 def getdata():
     """
-    Leaf-node detail lookup. Returns a JSON object with
-    Expenditure, Current Budget, Pre-Encumbrance, Encumbrance, Actuals.
+    Drill‐down detail from PostgreSQL.
+    Expects: fund_code, account, deptid, ledger_type
     """
-    fund_code = request.args.get('fund_code', '')
-    # SAMPLE data — in a real app you’d look up “fund_code” in your DB
-    sample = {
-        "Expenditure":    f"Detail for fund {fund_code}",
-        "Current Budget": "10,000.00",
-        "Pre-Encumbrance": "2,500.00",
-        "Encumbrance":    "1,500.00",
-        "Actuals":        "8,800.00"
-    }
-    return jsonify(sample)
+    fund   = request.args.get('fund_code', '')
+    acct   = request.args.get('account', '')
+    deptid = request.args.get('deptid', '')
+    ledger = request.args.get('ledger_type', 'ZZ_CHD_EX')
+
+    sql = text("""
+      SELECT
+        FISCAL_YEAR,
+        ACCOUNTING_PERIOD,
+        KK_TRAN_ID,
+        KK_TRAN_DT,
+        KK_TRAN_LN,
+        LEDGER_GROUP,
+        LEDGER,
+        GUID,
+        KK_SOURCE_TRAN,
+        LEDGER_TYPE_KK,
+        VOUCHER_ID,
+        VOUCHER_LINE_NUM,
+        DISTRIB_LINE_NUM,
+        INVOICE_ID,
+        VENDOR_ID,
+        NAME1,
+        TRANS_NBR,
+        TRANSACTION_DT,
+        TRANSACTION_LN,
+        JOURNAL_ID,
+        JOURNAL_DATE,
+        JOURNAL_LINE,
+        LINE_DESCR,
+        RUN_DT,
+        SEQNUM,
+        CHECK_NBR,
+        FUND_CODE,
+        DEPTID,
+        ACCOUNT,
+        PROGRAM_CODE,
+        PROJECT_ID,
+        CHARTFIELD1,
+        BUDGET_REF,
+        CHARTFIELD2,
+        AFFILIATE,
+        AFFILIATE_INTRA1,
+        ACCOUNTING_DT,
+        LINE_AMT,
+        BUDGET_PERIOD,
+        DTTM_STAMP_SEC,
+        DEPTID_DESCR,
+        ACCOUNT_DESCR,
+        RPTCAT_LVL,
+        KK_SRC_TRAN_DESCR
+      FROM aiw_kk_dept_sum_det
+      WHERE BUDGET_PERIOD LIKE '2025%'
+        AND FUND_CODE   = :fund
+        AND ACCOUNT     = :acct
+        AND DEPTID      = :deptid
+        AND LEDGER_TYPE_KK = :ledger
+      ORDER BY KK_TRAN_DT, KK_TRAN_ID;
+    """)
+
+    df = pd.read_sql(sql, engine,
+                     params={"fund": fund,
+                             "acct": acct,
+                             "deptid": deptid,
+                             "ledger": ledger})
+    return jsonify(df.to_dict(orient="records"))
 
 if __name__ == '__main__':
     app.run(debug=True)
