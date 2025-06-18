@@ -73,14 +73,14 @@
     .level-4 { padding-left: 96px; }
     .level-5 { padding-left: 120px; }
 
-    /* detail row styling */
-    .detail-row td {
-      background-color: #f9fafb;
-      padding: 0;
-      border: none;
+    /* Leaf node styling */
+    .leaf-node {
+      color: #059669;
+      font-weight: 500;
     }
-    .detail-row .financial-table {
-      margin: 0.5rem 0;
+    .leaf-node:hover {
+      background-color: rgba(5, 150, 105, 0.1);
+      cursor: pointer;
     }
   </style>
 </head>
@@ -167,7 +167,7 @@
 
     // Icons
     function getTreeIcon(item, expanded = true) {
-      if (!item.has_children) return '<span class="tree-icon"></span>';
+      if (!item.has_children) return '';
       return `<span class="tree-icon" style="transform: rotate(${expanded ? 0 : -90}deg)">▼</span>`;
     }
     function getFolderIcon(level, hasChildren) {
@@ -179,6 +179,9 @@
       items.forEach(item => {
         const row = document.createElement('tr');
         row.className = 'tree-item';
+        if (!item.has_children) {
+          row.classList.add('leaf-node');
+        }
         row.dataset.level = item.level;
         const jsonStr = JSON.stringify(item).replace(/"/g, '&quot;');
         row.innerHTML = `
@@ -187,6 +190,7 @@
               ${getTreeIcon(item,true)}
               <span class="ml-2">${getFolderIcon(item.level,item.has_children)}</span>
               <span class="ml-2 font-medium">${item.tree_node_desc} - ${item.account}</span>
+              ${!item.has_children ? '<span class="ml-2 text-xs text-green-600">(Click to view details)</span>' : ''}
             </div>
           </td>
           <td>${formatCurrency(item.total_budget_amt)}</td>
@@ -204,14 +208,18 @@
       items.forEach(item => {
         const row = document.createElement('tr');
         row.className = 'tree-item';
+        if (!item.has_children) {
+          row.classList.add('leaf-node');
+        }
         row.dataset.level = item.level;
         const jsonStr = JSON.stringify(item).replace(/"/g, '&quot;');
         row.innerHTML = `
           <td class="tree-toggle" data-item="${jsonStr}" onclick="handleNodeClick(this)">
             <div class="tree-node-cell level-${Math.min(item.level,5)}">
-              ${getTreeIcon(item,true)}
+             
               <span class="ml-2">${getFolderIcon(item.level,item.has_children)}</span>
               <span class="ml-2 font-medium">${item.tree_node_desc} - ${item.account}</span>
+              ${!item.has_children ? '<span class="ml-2 text-xs text-green-600">(Click to view details)</span>' : ''}
             </div>
           </td>
           <td>${formatCurrency(item.total_budget_amt)}</td>
@@ -229,14 +237,33 @@
     // Handle click on a node
     function handleNodeClick(cell) {
       const item = JSON.parse(cell.getAttribute('data-item'));
+      
       if (item.has_children) {
+        // Toggle expand/collapse for parent nodes
         toggleNode(cell);
-      } else if (item.fund_code) {
-        fetch(`/api/getdata?fund_code=${encodeURIComponent(item.fund_code)}`)
-          .then(r => r.json())
-          .then(data => showDetails(cell.closest('tr'), data))
-          .catch(console.error);
+      } else {
+        // Open new tab for leaf nodes with API call
+        openDetailTab(item);
       }
+    }
+
+    // Open new tab with detailed data
+    function openDetailTab(item) {
+      // Extract required parameters
+      const fundCode = item.fund_code || '';
+      const deptId = item.deptid || item.deptid || '';
+      const account = item.account || '';
+      
+      // Create URL with parameters
+      const params = new URLSearchParams({
+        fund_code: fundCode,
+        dept_id: deptId,
+        account: account
+      });
+      
+      // Open new tab with the detail page
+      const detailUrl = `/report/getdata?${params.toString()}`;
+      window.open(detailUrl, '_blank');
     }
 
     // Collapse/expand functionality
@@ -245,40 +272,17 @@
       const lvl = +row.dataset.level;
       const icon = cell.querySelector('.tree-icon');
       const collapsed = icon.style.transform === 'rotate(-90deg)';
+      
+      // Toggle icon rotation
       icon.style.transform = collapsed ? 'rotate(0deg)' : 'rotate(-90deg)';
+      
+      // Show/hide child rows
       let next = row.nextElementSibling;
       while (next && +next.dataset.level > lvl) {
         next.style.display = collapsed ? '' : 'none';
         next = next.nextElementSibling;
       }
     }
-
-    // Show detail row under a leaf node
-   function showDetails(row, detailData) {
-  // remove old detail-row if present
-  if (row.nextElementSibling?.classList.contains('detail-row')) {
-    row.nextElementSibling.remove();
-  }
-
-  // build a single <tr> with one <td> per key
-  const cols = Object.keys(detailData);
-  const detailRow = document.createElement('tr');
-  detailRow.className = 'detail-row';
-
-  cols.forEach((colName, idx) => {
-    const td = document.createElement('td');
-    // first column is a text label, others are amounts
-    if (idx === 0) {
-      td.textContent = detailData[colName];
-    } else {
-      td.textContent = formatCurrency(detailData[colName]);
-    }
-    detailRow.appendChild(td);
-  });
-
-  // insert right below the clicked row
-  row.parentNode.insertBefore(detailRow, row.nextSibling);
-}
 
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', () => {

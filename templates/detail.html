@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financial Details - {{ account }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .detail-table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 1rem;
+        }
+        .detail-table th,
+        .detail-table td {
+            padding: 12px;
+            border: 1px solid #e5e7eb;
+            text-align: left;
+        }
+        .detail-table th {
+            background-color: #3b82f6;
+            color: white;
+            font-weight: 600;
+        }
+        .detail-table tbody tr:hover {
+            background-color: rgba(59, 130, 246, 0.05);
+        }
+        .amount-positive {
+            color: #059669;
+            font-weight: 600;
+        }
+        .amount-negative {
+            color: #dc2626;
+            font-weight: 600;
+        }
+        .summary-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-3xl font-bold text-gray-800">Financial Details</h1>
+                <button onclick="window.close()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors">
+                    Close Tab
+                </button>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-blue-50 p-6 rounded-lg border-l-4 border-blue-500">
+                    <h3 class="font-semibold text-blue-800 text-sm uppercase tracking-wide">Fund Code</h3>
+                    <p class="text-2xl font-bold text-blue-600 mt-2">{{ fund_code or 'N/A' }}</p>
+                </div>
+                <div class="bg-green-50 p-6 rounded-lg border-l-4 border-green-500">
+                    <h3 class="font-semibold text-green-800 text-sm uppercase tracking-wide">Department ID</h3>
+                    <p class="text-2xl font-bold text-green-600 mt-2">{{ dept_id or 'N/A' }}</p>
+                </div>
+                <div class="bg-purple-50 p-6 rounded-lg border-l-4 border-purple-500">
+                    <h3 class="font-semibold text-purple-800 text-sm uppercase tracking-wide">Account</h3>
+                    <p class="text-2xl font-bold text-purple-600 mt-2">{{ account or 'N/A' }}</p>
+                </div>
+            </div>
+            
+            <!-- Summary Statistics -->
+            <div class="summary-card p-6 rounded-lg mb-8">
+                <h2 class="text-xl font-semibold mb-4">Summary Statistics</h2>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    <div class="text-center">
+                        <p class="text-3xl font-bold">{{ transactions|length }}</p>
+                        <p class="text-sm opacity-90">Total Transactions</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-3xl font-bold">${{ "%.2f"|format(total_amount) }}</p>
+                        <p class="text-sm opacity-90">Total Amount</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-3xl font-bold">${{ "%.2f"|format(final_balance) }}</p>
+                        <p class="text-sm opacity-90">Final Balance</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-sm font-semibold">{{ last_updated }}</p>
+                        <p class="text-sm opacity-90">Last Updated</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Transaction Details -->
+            <div class="bg-gray-50 p-6 rounded-lg">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Transaction Details</h2>
+                <div class="overflow-x-auto">
+                    <table class="detail-table">
+                        <thead>
+                            <tr>
+                                <th>Transaction Date</th>
+                                <th>Description</th>
+                                <th>Reference</th>
+                                <th>Amount</th>
+                                <th>Running Balance</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% set running_balance = 0 %}
+                            {% for transaction in transactions %}
+                                {% set running_balance = running_balance + transaction.amount %}
+                                <tr>
+                                    <td class="font-medium">{{ transaction.date }}</td>
+                                    <td>{{ transaction.description }}</td>
+                                    <td class="font-mono text-sm">{{ transaction.reference }}</td>
+                                    <td class="{{ 'amount-positive' if transaction.amount >= 0 else 'amount-negative' }}">
+                                        ${{ "%.2f"|format(transaction.amount) }}
+                                    </td>
+                                    <td class="font-semibold">${{ "%.2f"|format(running_balance) }}</td>
+                                    <td>
+                                        {% if transaction.amount >= 0 %}
+                                            <span class="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-semibold">Credit</span>
+                                        {% else %}
+                                            <span class="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-semibold">Debit</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="mt-8 flex flex-wrap gap-4 justify-center">
+                <button onclick="window.print()" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition-colors">
+                    Print Report
+                </button>
+                <button onclick="exportToCsv()" class="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg transition-colors">
+                    Export to CSV
+                </button>
+                <button onclick="window.close()" class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-lg transition-colors">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function exportToCsv() {
+            const data = [
+                ['Transaction Date', 'Description', 'Reference', 'Amount', 'Running Balance', 'Status']
+            ];
+            
+            {% for transaction in transactions %}
+                {% set running_balance = running_balance + transaction.amount %}
+                data.push([
+                    '{{ transaction.date }}',
+                    '{{ transaction.description }}',
+                    '{{ transaction.reference }}',
+                    '{{ "%.2f"|format(transaction.amount) }}',
+                    '{{ "%.2f"|format(running_balance) }}',
+                    '{{ "Credit" if transaction.amount >= 0 else "Debit" }}'
+                ]);
+            {% endfor %}
+            
+            const csvContent = data.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `financial_details_{{ account }}_{{ fund_code }}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
